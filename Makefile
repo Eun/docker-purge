@@ -3,6 +3,9 @@ GOPATH=/go/src/github.com/Eun/docker-purge
 build:
 	docker run --rm --volume $(shell pwd):${GOPATH} --workdir ${GOPATH} --env GITHUB_TOKEN=${GITHUB_TOKEN} golang:1.10.3-stretch ${GOPATH}/docker-entrypoint.sh build
 
+alpine:
+	docker run --rm --volume $(shell pwd):${GOPATH} --workdir ${GOPATH} --env GITHUB_TOKEN=${GITHUB_TOKEN} golang:1.10.3-alpine ${GOPATH}/docker-entrypoint.alpine.sh build
+
 release:
 	docker run --rm --volume $(shell pwd):${GOPATH} --workdir ${GOPATH} --env GITHUB_TOKEN=${GITHUB_TOKEN} golang:1.10.3-stretch ${GOPATH}/docker-entrypoint.sh release
 

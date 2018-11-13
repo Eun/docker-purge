@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/Eun/docker-purge/jq"
@@ -137,28 +136,43 @@ func handleListFlags(dockerClient *client.Client) {
 		*listNetworkFlag = true
 	}
 
+	var allEntities []interface{}
+
 	if *listContainerFlag {
-		if err := listContainerEntities(os.Stdout, dockerClient, *filterArg); err != nil {
+		entities, err := selectContainers(dockerClient, *filterArg)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
 		}
+		allEntities = append(allEntities, entities)
 	}
 
 	if *listImageFlag {
-		if err := listImageEntities(os.Stdout, dockerClient, *filterArg); err != nil {
+		entities, err := selectImages(dockerClient, *filterArg)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
 		}
+		allEntities = append(allEntities, entities)
 	}
 
 	if *listNetworkFlag {
-		if err := listNetworkEntities(os.Stdout, dockerClient, *filterArg); err != nil {
+		entities, err := selectNetworks(dockerClient, *filterArg)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
 		}
+		allEntities = append(allEntities, entities)
 	}
 
 	if *listContainerFlag || *listImageFlag || *listNetworkFlag {
+		if len(allEntities) == 0 {
+			fmt.Println("[]")
+		} else {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			enc.Encode(allEntities)
+		}
 		os.Exit(0)
 	}
 }
@@ -182,10 +196,7 @@ func handlePurge(dockerClient *client.Client) {
 		}
 
 		if !*dryRunFlag {
-			if err := deleteContainers(dockerClient, containersToDelete, containerRemoveOptions); err != nil {
-				fmt.Fprintln(os.Stderr, err.Error())
-				os.Exit(1)
-			}
+			deleteContainers(dockerClient, containersToDelete, containerRemoveOptions)
 		} else {
 			for _, container := range containersToDelete {
 				fmt.Fprintf(os.Stdout, "Would delete container %s\n", container.ID)
@@ -201,10 +212,7 @@ func handlePurge(dockerClient *client.Client) {
 		}
 
 		if !*dryRunFlag {
-			if err := deleteImages(dockerClient, imagesToDelete, imageRemoveOptions); err != nil {
-				fmt.Fprintln(os.Stderr, err.Error())
-				os.Exit(1)
-			}
+			deleteImages(dockerClient, imagesToDelete, imageRemoveOptions)
 		} else {
 			for _, image := range imagesToDelete {
 				fmt.Fprintf(os.Stdout, "Would delete image %s\n", image.ID)
@@ -220,10 +228,7 @@ func handlePurge(dockerClient *client.Client) {
 		}
 
 		if !*dryRunFlag {
-			if err := deleteNetworks(dockerClient, networksToDelete); err != nil {
-				fmt.Fprintln(os.Stderr, err.Error())
-				os.Exit(1)
-			}
+			deleteNetworks(dockerClient, networksToDelete)
 		} else {
 			for _, image := range networksToDelete {
 				fmt.Fprintf(os.Stdout, "Would delete image %s\n", image.ID)
@@ -261,13 +266,12 @@ func selectContainers(dockerClient *client.Client, filter string) ([]container, 
 	return selectedContainers, nil
 }
 
-func deleteContainers(dockerClient *client.Client, containers []container, removeOptions types.ContainerRemoveOptions) error {
+func deleteContainers(dockerClient *client.Client, containers []container, removeOptions types.ContainerRemoveOptions) {
 	for _, container := range containers {
 		if err := dockerClient.ContainerRemove(context.Background(), container.ID, removeOptions); err != nil {
-			return fmt.Errorf("unable to delete container %s: %s", container.ID, err.Error())
+			fmt.Fprintf(os.Stderr, "unable to delete container %s: %s\n", container.ID, err.Error())
 		}
 	}
-	return nil
 }
 
 func selectImages(dockerClient *client.Client, filter string) ([]image, error) {
@@ -299,13 +303,12 @@ func selectImages(dockerClient *client.Client, filter string) ([]image, error) {
 	return selectedImages, nil
 }
 
-func deleteImages(dockerClient *client.Client, images []image, removeOptions types.ImageRemoveOptions) error {
+func deleteImages(dockerClient *client.Client, images []image, removeOptions types.ImageRemoveOptions) {
 	for _, image := range images {
 		if _, err := dockerClient.ImageRemove(context.Background(), image.ID, removeOptions); err != nil {
-			return fmt.Errorf("unable to delete image %s: %s", image.ID, err.Error())
+			fmt.Fprintf(os.Stderr, "unable to delete image %s: %s\n", image.ID, err.Error())
 		}
 	}
-	return nil
 }
 
 func selectNetworks(dockerClient *client.Client, filter string) ([]network, error) {
@@ -337,62 +340,10 @@ func selectNetworks(dockerClient *client.Client, filter string) ([]network, erro
 	return selectedNetworks, nil
 }
 
-func deleteNetworks(dockerClient *client.Client, networks []network) error {
+func deleteNetworks(dockerClient *client.Client, networks []network) {
 	for _, network := range networks {
 		if err := dockerClient.NetworkRemove(context.Background(), network.ID); err != nil {
-			return fmt.Errorf("unable to delete network %s: %s", network.ID, err.Error())
+			fmt.Fprintf(os.Stderr, "unable to delete network %s: %s\n", network.ID, err.Error())
 		}
 	}
-	return nil
-}
-
-func listContainerEntities(w io.Writer, dockerClient *client.Client, filter string) error {
-	entities, err := selectContainers(dockerClient, filter)
-	if err != nil {
-		return err
-	}
-
-	if len(entities) == 0 {
-		_, err := io.WriteString(w, "[]\n")
-		return err
-	}
-
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	enc.Encode(entities)
-	return nil
-}
-
-func listImageEntities(w io.Writer, dockerClient *client.Client, filter string) error {
-	entities, err := selectImages(dockerClient, filter)
-	if err != nil {
-		return err
-	}
-
-	if len(entities) == 0 {
-		_, err := io.WriteString(w, "[]\n")
-		return err
-	}
-
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	enc.Encode(entities)
-	return nil
-}
-
-func listNetworkEntities(w io.Writer, dockerClient *client.Client, filter string) error {
-	entities, err := selectNetworks(dockerClient, filter)
-	if err != nil {
-		return err
-	}
-
-	if len(entities) == 0 {
-		_, err := io.WriteString(w, "[]\n")
-		return err
-	}
-
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	enc.Encode(entities)
-	return nil
 }
