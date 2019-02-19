@@ -46,6 +46,8 @@ var (
 	containerRemoveForceFlag   = kingpin.Flag("container.remove.force", "force removal of container").Bool()
 	containerRemoveLinksFlag   = kingpin.Flag("container.remove.links", "remove links during removal").Bool()
 	containerRemoveVolumesFlag = kingpin.Flag("container.remove.volumes", "remove volumes during removal").Bool()
+	containerStop              = kingpin.Flag("container.stop", "stop running docker container").Bool()
+	containerKillSignal        = kingpin.Flag("container.kill", "kill running docker container with the specified signal").Default("").String()
 
 	// image remove options
 	imageRemoveForceFlag         = kingpin.Flag("image.remove.force", "force removal of image").Bool()
@@ -97,6 +99,8 @@ func main() {
 	if *forceRemoveFlag {
 		*containerRemoveForceFlag = true
 		*imageRemoveForceFlag = true
+		*containerStop = true
+		*containerKillSignal = "9"
 	}
 
 	if *removeAllFlag {
@@ -196,7 +200,7 @@ func handlePurge(dockerClient *client.Client) {
 		}
 
 		if !*dryRunFlag {
-			deleteContainers(dockerClient, containersToDelete, containerRemoveOptions)
+			deleteContainers(dockerClient, containersToDelete, containerRemoveOptions, *containerKillSignal, *containerStop)
 		} else {
 			for _, container := range containersToDelete {
 				fmt.Fprintf(os.Stdout, "Would delete container %s\n", container.ID)
@@ -266,8 +270,29 @@ func selectContainers(dockerClient *client.Client, filter string) ([]container, 
 	return selectedContainers, nil
 }
 
-func deleteContainers(dockerClient *client.Client, containers []container, removeOptions types.ContainerRemoveOptions) {
+func deleteContainers(dockerClient *client.Client, containers []container, removeOptions types.ContainerRemoveOptions, killContainerSignal string, stopContainers bool) {
 	for _, container := range containers {
+		if killContainerSignal != "" || stopContainers {
+			details, err := dockerClient.ContainerInspect(context.Background(), container.ID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "unable to inspect container %s: %s\n", container.ID, err.Error())
+				continue
+			}
+			if details.State.Running {
+				if killContainerSignal != "" {
+					if err := dockerClient.ContainerKill(context.Background(), container.ID, killContainerSignal); err != nil {
+						fmt.Fprintf(os.Stderr, "unable to kill container %s: %s\n", container.ID, err.Error())
+						continue
+					}
+				}
+				if stopContainers {
+					if err := dockerClient.ContainerStop(context.Background(), container.ID, nil); err != nil {
+						fmt.Fprintf(os.Stderr, "unable to stop container %s: %s\n", container.ID, err.Error())
+						continue
+					}
+				}
+			}
+		}
 		if err := dockerClient.ContainerRemove(context.Background(), container.ID, removeOptions); err != nil {
 			fmt.Fprintf(os.Stderr, "unable to delete container %s: %s\n", container.ID, err.Error())
 		}

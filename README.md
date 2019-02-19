@@ -6,7 +6,8 @@ Delete docker images with jq.
 usage: docker-purge [<flags>] [<filter>]
 
 Flags:
-      --help                    Show context-sensitive help (also try --help-long and --help-man).
+      --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
       --list-all                list docker containers, images, networks
       --list-containers         list docker containers
       --list-images             list docker images
@@ -15,19 +16,22 @@ Flags:
       --containers              limit purge to docker containers
       --images                  limit purge to docker images
       --networks                limit purge to docker networks
-      --force                   sets container.remove.force and image.remove.force to true
+      --force                   sets container.remove.force and
+                                image.remove.force to true
       --all                     remove everything related to an entity
       --container.remove.force  force removal of container
       --container.remove.links  remove links during removal
       --container.remove.volumes  
                                 remove volumes during removal
+      --container.stop          stop running docker container
+      --container.kill=""       kill running docker container with the specified
+                                signal
       --image.remove.force      force removal of image
       --image.remove.prunechildren  
                                 prune children on removal
 
 Args:
   [<filter>]  jq filter to apply
-
 ```
 ## Examples
 
