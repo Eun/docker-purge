@@ -86,6 +86,7 @@ type network struct {
 	IsContainer bool
 	IsNetwork   bool
 	types.NetworkResource
+	Created int64 // override NetworkResource Created
 }
 
 func main() {
@@ -343,7 +344,7 @@ func selectNetworks(dockerClient *client.Client, filter string) ([]network, erro
 	}
 	var selectedNetworks []network
 	for _, e := range entities {
-		n := network{IsNetwork: true, NetworkResource: e}
+		n := network{IsNetwork: true, NetworkResource: e, Created: e.Created.Unix()}
 		if filter != "" {
 			buf, err := json.Marshal(n)
 			if err != nil {
